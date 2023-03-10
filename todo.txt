@@ -1,0 +1,3 @@
+TODO: Add get_log_data for sim logs that collate data into numpy arrays
+TODO: Add plotting capability for the simulation
+TODO: Print robot inference performance in each round along with the other stats
