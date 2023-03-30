@@ -14,7 +14,6 @@ from typing import TypeVar, Generic, Optional
 
 from PIL.Image import Image
 
-from cloudsift.datasets import ImageDatasetType
 from cloudsift.utils import get_rel_pkg_path
 from cloudsift.communication import TCPClientSocket
 from cloudsift.simulation import BaseCloudLabeler, LabelingResult

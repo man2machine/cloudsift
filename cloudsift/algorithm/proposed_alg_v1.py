@@ -7,7 +7,8 @@ Created on Wed Dec 14 22:10:41 2022
 
 from enum import Enum
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any, Optional, Union
+from collections.abc import Callable
 
 import numpy as np
 import numpy.typing as npt
@@ -204,8 +205,8 @@ class UnseenRawDataSample:
 @dataclass(frozen=True)
 class UploadDataPoint:
     compressed: bool
-    img_raw: Image
-    latent: torch.FloatTensor
+    img_raw: Optional[Image]
+    latent: Optional[torch.FloatTensor]
     simulation_metadata: UnseenRawDataSample
 
 
@@ -218,7 +219,7 @@ class CacheEntry:
 class RobotPolicy(BaseRobotPolicy):
     def __init__(
             self,
-            robot: Robot,
+            robot: Robot[tuple[Image, int]],
             img_shape: tuple[int],
             num_classes: int,
             test_transform: Callable[[Image], torch.Tensor],
@@ -444,7 +445,7 @@ class ReconstructionImageCloudLabeler(BaseCloudLabeler[int]):
     def __init__(
             self,
             mse_threshold: float = 0.1) -> None:
-        
+
         super().__init__()
         self.mse_threshold = mse_threshold
 
@@ -461,7 +462,7 @@ class ReconstructionImageCloudLabeler(BaseCloudLabeler[int]):
         unseen_orig_labels = torch.tensor(unseen_orig_labels)
         imgs_to_label = torch.concatenate(imgs_to_label)
         orig_imgs = torch.concatenate(orig_imgs)
-        
+
         with torch.set_grad_enabled(False):
             mse_per_decoded_img = F.mse_loss(
                 orig_imgs[~mask],
@@ -551,13 +552,13 @@ class CloudComputer(BaseCloudComputer):
         self.init_lr = init_lr
 
         self.device = device
-    
+
     def initialize(
             self) -> None:
-        
+
         if self.labeling_method == LabelingMethod.MANUAL:
             self.label_allocator.initialize()
-        
+
         for (input_img_raw, label) in self.cloud_init_dataset:
             self._add_data_point(
                 compressed=False,
@@ -705,13 +706,13 @@ class CloudComputer(BaseCloudComputer):
             dim=0)
 
         return losses.detach()
-    
+
     def _train_task_nets_single_epoch(
             self,
             dataloader_train: DataLoader) -> tuple[float, float, dict[str, Any]]:
-        
+
         self.common_policy_model.train()
-        
+
         running_count = 0
         running_correct = 0
         running_loss = 0.0
@@ -769,7 +770,7 @@ class CloudComputer(BaseCloudComputer):
                         outputs['x_decodeds'],
                         input_imgs,
                         reduction='none').mean(dim=(1, 2, 3))
-                    
+
                     labeling_successes = \
                         reconstruction_losses < self.decode_valid_threshold
                     labeling_successes = \
@@ -782,7 +783,7 @@ class CloudComputer(BaseCloudComputer):
                     imp_loss_targets = \
                         (imp_loss_targets - imp_loss_targets.min())
                     imp_loss_targets /= (imp_loss_targets.max() -
-                                        imp_loss_targets.min())
+                                         imp_loss_targets.min())
                     imp_loss_targets = torch.clamp(imp_loss_targets, min=0)
                     importance_losses = F.binary_cross_entropy_with_logits(
                         outputs['importance_outs'][:, 0],
@@ -796,8 +797,8 @@ class CloudComputer(BaseCloudComputer):
 
                     loss_components.append(classification_loss)
                     loss_components.append(reconstruction_loss * self.lambda_reconstruction)  # TODO: undo this
-                    loss_components.append(importance_loss * self.lambda_importance) # fix this
-                    loss_components.append(compression_loss * self.lambda_compression) # fix this
+                    loss_components.append(importance_loss * self.lambda_importance)  # fix this
+                    loss_components.append(compression_loss * self.lambda_compression)  # fix this
 
                     # We can still train on the all of the data since even if the autoencoder failed,
                     # we have the original data point
@@ -825,21 +826,21 @@ class CloudComputer(BaseCloudComputer):
                     training_loss,
                     ", ".join(["{:.4f}".format(n) for n in loss_components]),
                     training_accuracy))
-            
+
         pbar.close()
-        
+
         stats = {
             'acc': training_accuracy,
             'loss_avg': training_loss
         }
-        
+
         return training_accuracy, training_loss, stats
-    
+
     def _get_action_nets_training_data(
             self) -> tuple[DataLoader, float, float]:
-        
+
         model_init_training = self.common_policy_model.training
-        
+
         stage2_datas = {
             'masks': [],
             'labeling_successes': [],
@@ -950,19 +951,19 @@ class CloudComputer(BaseCloudComputer):
             sampler=balanced_sampler,
             num_workers=0,
             pin_memory=False)
-        
+
         self.common_policy_model.train(model_init_training)
-        
+
         return dataloader_train, importance_loss_min, importance_loss_range
-    
+
     def _train_action_nets(
             self,
             num_epochs: int) -> dict[str, Any]:
-        
-        scheduler = self._reset_lr_and_get_scheduler()       
+
+        scheduler = self._reset_lr_and_get_scheduler()
         dataloader_train, importance_loss_min, importance_loss_range = self._get_action_nets_training_data()
         self.common_policy_model.train()
-        
+
         for i in range(num_epochs):
             running_loss = 0
             running_count = 0
@@ -1011,16 +1012,16 @@ class CloudComputer(BaseCloudComputer):
 
             scheduler.step(training_loss)
             pbar.close()
-        
+
         stats = {
             'loss_avg': training_loss
         }
-        
+
         return stats
-    
+
     def _train_policy(
             self) -> CloudProcessingResult:
-        
+
         print("Starting training round")
 
         balanced_sampler = RebalancedCategoricalSampler(
@@ -1055,6 +1056,7 @@ class CloudComputer(BaseCloudComputer):
         dataset_dist[unique_classes] = unique_class_sample_count
         dataset_dist = (dataset_dist / len(self.cloud_dataset)).tolist()
 
+        # add loss per class
         training_stats = {
             'task_nets_stats': task_nets_stats,
             'action_nets_stats': action_nets_stats
@@ -1075,7 +1077,7 @@ class CloudComputer(BaseCloudComputer):
             unseen_orig_img_raw: Optional[Image] = None,
             unseen_orig_label: int,
             skip_labeling: bool = False) -> None:
-        
+
         if not skip_labeling:
             labeling_out = None
 
@@ -1124,13 +1126,13 @@ class CloudComputer(BaseCloudComputer):
 
             labeling_success = labeling_out.labeling_success
             label = labeling_out.label
-        
+
         else:
             labeling_success = True
             label = unseen_orig_label
             img_decoded = None
             latent = None
-        
+
         self.cloud_dataset.append(
             CloudDataPoint(
                 compressed=0.0,

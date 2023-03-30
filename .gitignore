@@ -1,4 +1,6 @@
 logs/
+old/
+extra/
 
 ########################################
 # From github .gitignore from Python

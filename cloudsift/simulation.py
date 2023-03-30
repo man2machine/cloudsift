@@ -19,23 +19,20 @@ from PIL.Image import Image
 
 from cloudsift.datasets import RobotDataStreamer
 from cloudsift.logging import (
-    NetworkStatsLogger,
-    RobotInferenceStatsLogger,
-    RobotTestStatsLogger,
-    CloudTrainingStatsLogger)
+    NetworkStatsLogger, RobotInferenceStatsLogger, RobotTestStatsLogger, CloudTrainingStatsLogger)
 from cloudsift.utils import IntArrayLike1D, get_rel_pkg_path, get_timestamp_str
 
-DEFAULT_SIM_LOG_DIR = get_rel_pkg_path("logs/Simulation {}/".format(get_timestamp_str()))
+DEFAULT_SIM_LOG_DIR = get_rel_pkg_path("logs/")
 
 T_co = TypeVar('T_co', covariant=True)
 
 
-class Robot:
+class Robot(Generic[T_co]):
     def __init__(
             self,
             name: str,
             cache_size: Union[int, None],
-            data_streamer: RobotDataStreamer) -> None:
+            data_streamer: RobotDataStreamer[T_co]) -> None:
 
         self.name = name
         self.upload_cache = RobotCache(cache_size)
@@ -251,12 +248,12 @@ class BaseCloudComputer(metaclass=abc.ABCMeta):
 
         self.num_robots = num_robots
         self.label_allocator = label_allocator
-    
+
     def initialize(
             self) -> None:
-        
+
         pass
-    
+
     @abc.abstractmethod
     def get_init_robot_policies(
             self,
@@ -323,7 +320,9 @@ class Simulator:
             collate_fn=self._test_collate,
             pin_memory=True)
 
-        self.save_dir = DEFAULT_SIM_LOG_DIR if save_dir is None else save_dir
+        if save_dir is None:
+            save_dir = os.path.join(DEFAULT_SIM_LOG_DIR, "Simulation {}".format(get_timestamp_str()))
+        self.save_dir = save_dir
         os.makedirs(self.save_dir, exist_ok=True)
 
         self.network_stats_log = NetworkStatsLogger(
@@ -493,21 +492,28 @@ class Simulator:
     def initialize(
             self,
             verbose: bool = True) -> None:
-        
+
+        if verbose:
+            print("Saving to:", self.save_dir)
+
         self.cloud_computer.initialize()
+
         robot_inital_policy_info = self.cloud_computer.get_init_robot_policies(self.robots)
         self.robot_policies = robot_inital_policy_info.robot_policies
+
         for i in range(self.num_robots):
             self.robot_inference_stats_log.log_data(
                 round_index=self.round_index,
                 robot_index=i,
                 y_preds=[],
                 y_trues=[])
+
         self.cloud_training_stats_log.log_data(
             round_index=self.round_index,
             dataset_dist=self.experiment_data['class_dists']['cloud'],
             training_stats=None,
             num_labels_requested=0)
+
         test_result_data_per_robot = self.run_test()
         for i, (labels, preds) in enumerate(test_result_data_per_robot):
             self.robot_test_stats_log.log_data(
@@ -515,6 +521,7 @@ class Simulator:
                 robot_index=i,
                 y_trues=labels,
                 y_preds=preds)
+
         self.network_stats_log.log_data(
             round_index=self.round_index,
             robots_to_cloud_bytes=[0] * self.num_robots,

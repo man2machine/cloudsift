@@ -261,4 +261,3 @@ class RobotTestStatsLogger(SimulationLogger):
         
         with open(self.log_fname, 'w') as f:
             json.dump(self._log, f)
-

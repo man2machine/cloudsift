@@ -7,7 +7,8 @@ Created on Wed Dec 14 22:10:27 2022
 
 from enum import Enum
 import collections
-from typing import Any, Union, Callable, Optional, TypeVar, Iterable, Generic
+from typing import Any, Union, Optional, TypeVar, Generic
+from collections.abc import Callable, Iterable
 
 import numpy as np
 
@@ -23,10 +24,10 @@ from PIL.Image import Image
 from cloudsift.utils import IntArrayLike1D, FloatArrayLike1D
 
 
-class ImageDatasetType(Enum):
-    MNIST = "mnist"
-    CIFAR10 = "cifar10"
-    CIFAR100 = "cifar100"
+class ImageDatasetType(str, Enum):
+    MNIST = 'mnist'
+    CIFAR10 = 'cifar10'
+    CIFAR100 = 'cifar100'
 
 
 IMG_DATASET_TO_NUM_CLASSES = {
@@ -68,26 +69,20 @@ T_co2 = TypeVar('T_co2', covariant=True)
 T_co3 = TypeVar('T_co3', covariant=True)
 
 
-class RawDataset(Generic[T_co1, T_co2], Dataset[Union[tuple[T_co1, T_co2], T_co1]]):
+class RawDataset(Generic[T_co], Dataset[T_co]):
     def __init__(
             self,
             x_data: Iterable[T_co1],
-            y_data: Optional[Iterable[T_co2]] = None,
             metadata: Optional[Any] = None) -> None:
 
         super().__init__()
 
-        self.labeled = y_data is not None
         self.x_data = x_data
-        self.y_data = y_data
         self.metadata = metadata
 
     def __getitem__(
             self,
-            index: int) -> Union[tuple[T_co1, T_co2], T_co1]:
-
-        if self.labeled:
-            return (self.x_data[index], self.y_data[index])
+            index: int) -> T_co:
 
         return self.x_data[index]
 
@@ -97,32 +92,37 @@ class RawDataset(Generic[T_co1, T_co2], Dataset[Union[tuple[T_co1, T_co2], T_co1
         return len(self.x_data)
 
 
-class TransformDataset(Generic[T_co1, T_co2, T_co3], Dataset[Union[tuple[T_co1, T_co2], T_co1]]):
+def transform_with_label(
+        transform_func: Callable[[T_co1], T_co2]) -> Callable[[tuple[T_co1, T_co3]], tuple[T_co2, T_co3]]:
+
+    def transform_with_label_wrapper(
+            data: tuple[T_co1, T_co3]) -> tuple[T_co2, T_co3]:
+
+        inputs, label = data
+
+        return transform_func(inputs), label
+
+    return transform_with_label_wrapper
+
+
+class TransformDataset(Generic[T_co1, T_co2], Dataset[T_co2]):
     def __init__(
             self,
             dataset: Dataset,
-            transform_func: Optional[Callable[[T_co1], T_co3]] = None,
-            labeled: bool = True) -> None:
+            transform_func: Callable[[T_co1], T_co2]) -> None:
 
         super().__init__()
 
         self.dataset = dataset
         self.transform_func = transform_func
-        self.labeled = labeled
 
     def __getitem__(
             self,
-            index: int) -> Union[tuple[T_co3, T_co2], T_co3]:
+            index: int) -> T_co2:
 
-        if self.labeled:
-            inputs, label = self.dataset[index]
-            if self.transform_func:
-                inputs = self.transform_func(inputs)
-            return (inputs, label)
-        else:
-            inputs = self.dataset[index]
-            inputs = self.transform_func(inputs)
-            return inputs
+        inputs = self.transform_func(self.dataset[index])
+
+        return inputs
 
     def __len__(
             self) -> int:
@@ -339,7 +339,7 @@ def get_img_train_test_transforms(
         *,
         dataset_type: ImageDatasetType,
         augment: bool = True,
-        new_input_size: Optional[int] = None) -> dict[str, Callable[[Image], torch.Tensor]]:
+        new_input_size: Optional[int] = None) -> dict[str, Callable]:
 
     normalize_mean = None
     normalize_std = None
@@ -534,17 +534,14 @@ def generate_experiment_data(
 
     # indexed first by class, then by robot
     device_samples = [
-        np.split(
-            unique_samples_per_class[i],
-            np.cumsum(device_num_unique_samples[:, i]))
+        np.split(unique_samples_per_class[i], np.cumsum(device_num_unique_samples[:, i]))
         for i in range(num_classes)]
     # indexed first by robot, then by class
     device_samples = [
         np.concatenate([device_samples[i][j] for i in range(num_classes)])
         for j in range(num_robots + 2)]
     for i in range(2, num_robots + 2):
-        device_samples[i] = np.concatenate(
-            (device_samples[i], robot_common_samples))
+        device_samples[i] = np.concatenate((device_samples[i], robot_common_samples))
 
     device_sample_info = {
         'cloud': device_samples[0],
@@ -568,10 +565,11 @@ def generate_experiment_data(
     datasets_raw['robots_augmented'] = [
         TransformDataset(
             dataset,
-            generate_robot_img_transform(
-                dataset_type=dataset_type,
-                aggro=robot_augmentation_aggro,
-                rng=rng))
+            transform_with_label(
+                generate_robot_img_transform(
+                    dataset_type=dataset_type,
+                    aggro=robot_augmentation_aggro,
+                    rng=rng)))
         for dataset in datasets_raw['robots']]
 
     robot_data_samplers = [
