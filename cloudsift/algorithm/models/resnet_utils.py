@@ -5,15 +5,19 @@ Created on Thu Dec 15 02:26:00 2022
 @author: Shahir
 """
 
+import abc
+from typing import Optional
+
+import torch
 import torch.nn as nn
 
 
-def conv_layer(
-        in_channels,
-        out_channels,
-        kernel_size=3,
-        stride=1,
-        bias=False):
+def _conv_layer(
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 3,
+        stride: int = 1,
+        bias: bool = False) -> nn.Conv2d:
 
     layer = nn.Conv2d(
         in_channels,
@@ -26,28 +30,37 @@ def conv_layer(
     return layer
 
 
-class BasicBlock(nn.Module):
-    expansion = 1
+class BaseBlock(nn.Module, metaclass=abc.ABCMeta):
+    @property
+    @abc.abstractmethod
+    def EXPANSION(
+            self) -> None:
+
+        raise NotImplementedError
+
+
+class BasicBlock(BaseBlock):
+    EXPANSION = 1
 
     def __init__(
             self,
-            in_channels,
-            out_channels,
-            stride=1,
-            activation=nn.LeakyReLU,
-            downsample=None,
-            batchnorm=False):
+            in_channels: int,
+            out_channels: int,
+            stride: int = 1,
+            activation: nn.Module = nn.LeakyReLU,
+            downsample: Optional[nn.Module] = None,
+            batchnorm: bool = False) -> None:
 
         super().__init__()
 
-        self.conv1 = conv_layer(
+        self.conv1 = _conv_layer(
             in_channels=in_channels,
             out_channels=out_channels,
             stride=stride,
             bias=not batchnorm)
         self.bn1 = nn.BatchNorm2d(out_channels) if batchnorm else nn.Identity()
         self.activation = activation(inplace=True)
-        self.conv2 = conv_layer(out_channels, out_channels, bias=not batchnorm)
+        self.conv2 = _conv_layer(out_channels, out_channels, bias=not batchnorm)
         self.bn2 = nn.BatchNorm2d(out_channels) if batchnorm else nn.Identity()
         self.downsample = downsample
         self.stride = stride
@@ -55,7 +68,7 @@ class BasicBlock(nn.Module):
 
     def forward(
             self,
-            x):
+            x: torch.Tensor) -> torch.Tensor:
 
         residual = x
 
@@ -77,13 +90,12 @@ class BasicBlock(nn.Module):
 
 class ResNetBuilder(nn.Module):
     def __init__(
-            self):
+            self) -> None:
 
         super().__init__()
 
     def _initialize_weights(
-            self,
-            initialize_linear=False):
+            self) -> None:
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -98,25 +110,24 @@ class ResNetBuilder(nn.Module):
 
     def _make_layer(
             self,
-            in_channels,
-            out_channels,
-            num_blocks,
-            stride=1,
-            block=BasicBlock,
-            batchnorm=False):
+            in_channels: int,
+            out_channels: int,
+            num_blocks: int,
+            stride: int = 1,
+            block: BaseBlock = BasicBlock,
+            batchnorm: bool = False) -> nn.Sequential:
 
         downsample = None
-        if stride != 1 or in_channels != out_channels * block.expansion:
+        if stride != 1 or in_channels != out_channels * block.EXPANSION:
             downsample = nn.Sequential(
                 nn.Conv2d(
                     in_channels=in_channels,
-                    out_channels=out_channels * block.expansion,
+                    out_channels=out_channels * block.EXPANSION,
                     kernel_size=1,
                     stride=stride,
                     bias=not batchnorm),
                 nn.BatchNorm2d(
-                    out_channels * block.expansion) if batchnorm else nn.Identity(),
-            )
+                    out_channels * block.EXPANSION) if batchnorm else nn.Identity())
 
         layers = []
         layers.append(block(
@@ -124,8 +135,8 @@ class ResNetBuilder(nn.Module):
             out_channels,
             stride=stride,
             downsample=downsample))
-        in_channels = out_channels * block.expansion
-        for i in range(1, num_blocks):
+        in_channels = out_channels * block.EXPANSION
+        for _ in range(1, num_blocks):
             layers.append(
                 block(in_channels, out_channels))
 

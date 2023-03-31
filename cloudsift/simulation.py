@@ -19,7 +19,10 @@ from PIL.Image import Image
 
 from cloudsift.datasets import RobotDataStreamer
 from cloudsift.logging import (
-    NetworkStatsLogger, RobotInferenceStatsLogger, RobotTestStatsLogger, CloudTrainingStatsLogger)
+    NetworkStatsLogger,
+    RobotInferenceStatsLogger,
+    RobotTestStatsLogger,
+    CloudTrainingStatsLogger)
 from cloudsift.utils import IntArrayLike1D, get_rel_pkg_path, get_timestamp_str
 
 DEFAULT_SIM_LOG_DIR = get_rel_pkg_path("logs/")

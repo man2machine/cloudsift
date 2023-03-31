@@ -13,7 +13,7 @@ from collections.abc import Callable, Iterable
 import numpy as np
 
 import torch
-from torch.utils.data import (Dataset, Subset, ConcatDataset, WeightedRandomSampler, Sampler)
+from torch.utils.data import Dataset, Subset, ConcatDataset, WeightedRandomSampler, Sampler
 
 import torchvision
 from torchvision import transforms
@@ -307,8 +307,7 @@ def generate_robot_img_transform(
                         -10, 10, 0, aggro, rng))],
                 p=0.9)])
 
-    elif (dataset_type == ImageDatasetType.CIFAR10 or
-          dataset_type == ImageDatasetType.CIFAR100):
+    elif (dataset_type == ImageDatasetType.CIFAR10 or dataset_type == ImageDatasetType.CIFAR100):
         transform = transforms.Compose([
             transforms.RandomHorizontalFlip(
                 p=augment_value_select(
@@ -364,8 +363,7 @@ def get_img_train_test_transforms(
 
         test_transform = transforms.Compose([])
 
-    elif (dataset_type == ImageDatasetType.CIFAR10 or
-          dataset_type == ImageDatasetType.CIFAR100):
+    elif (dataset_type == ImageDatasetType.CIFAR10 or dataset_type == ImageDatasetType.CIFAR100):
         normalize_mean = np.array([0.4914, 0.4822, 0.4465], dtype=np.float32)
         normalize_std = np.array([0.247, 0.243, 0.261], dtype=np.float32)
         to_tensor_transform = transforms.Compose([
