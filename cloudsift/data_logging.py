@@ -87,12 +87,13 @@ class NetworkStatsLogger(SimulationLogger):
             data[k] = data_per_round
 
         return data
-    
+
     def save_log(
             self) -> None:
-        
+
         with open(self.log_fname, 'w') as f:
             json.dump(self._log, f)
+
 
 class RobotInferenceStatsLogger(SimulationLogger):
     LOG_AXIS_NAMES = ('round_index', 'robot_index')
@@ -146,12 +147,13 @@ class RobotInferenceStatsLogger(SimulationLogger):
             data[k] = np.array([n[k] for n in log_flattened]).copy()
 
         return data
-    
+
     def save_log(
             self) -> None:
-        
+
         with open(self.log_fname, 'w') as f:
             json.dump(self._log, f)
+
 
 class CloudTrainingStatsLogger(SimulationLogger):
     LOG_AXIS_NAMES = ('round_index',)
@@ -201,9 +203,10 @@ class CloudTrainingStatsLogger(SimulationLogger):
 
     def save_log(
             self) -> None:
-        
+
         with open(self.log_fname, 'w') as f:
             json.dump(self._log, f)
+
 
 class RobotTestStatsLogger(SimulationLogger):
     LOG_AXIS_NAMES = ('round_index', 'robot_index')
@@ -255,9 +258,9 @@ class RobotTestStatsLogger(SimulationLogger):
             data[k] = np.array([n[k] for n in log_flattened]).reshape(log_flattened).copy()
 
         return data
-    
+
     def save_log(
             self) -> None:
-        
+
         with open(self.log_fname, 'w') as f:
             json.dump(self._log, f)

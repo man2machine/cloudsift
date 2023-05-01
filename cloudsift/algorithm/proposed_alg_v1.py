@@ -47,9 +47,9 @@ from cloudsift.simulation import (
     LabelingResult)
 from cloudsift.frontend.labeling_client import ManualCategoricalImageCloudLabeler
 from cloudsift.algorithm.models.resnet_utils import ResNetBuilder
+from cloudsift.algorithm.utils import calc_model_size
 from cloudsift.training import make_optimizer, make_scheduler, set_optimizer_lr, shrink_and_preturb
 from cloudsift.utils import BoolArrayLike1D, IntArrayLike1D
-from cloudsift.algorithm.utils import calc_model_size
 
 
 class Decoder(ResNetBuilder):
@@ -408,9 +408,9 @@ class RobotPolicy(BaseRobotPolicy):
 @dataclass(frozen=True)
 class CloudDataPoint:
     compressed: bool
-    img_raw: Image
-    img_decoded: torch.FloatTensor
-    latent: torch.FloatTensor
+    img_raw: Optional[Image]
+    img_decoded: Optional[torch.FloatTensor]
+    latent: Optional[torch.FloatTensor]
     labeling_success: bool
 
 

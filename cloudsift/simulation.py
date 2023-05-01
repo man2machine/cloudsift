@@ -18,7 +18,7 @@ from tqdm.auto import tqdm
 from PIL.Image import Image
 
 from cloudsift.datasets import RobotDataStreamer
-from cloudsift.logging import (
+from cloudsift.data_logging import (
     NetworkStatsLogger,
     RobotInferenceStatsLogger,
     RobotTestStatsLogger,

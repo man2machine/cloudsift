@@ -3,6 +3,8 @@
 Created on Thu Dec 15 02:26:00 2022
 
 @author: Shahir
+
+Based on https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py
 """
 
 import abc
@@ -12,59 +14,61 @@ import torch
 import torch.nn as nn
 
 
-def _conv_layer(
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int = 3,
-        stride: int = 1,
-        bias: bool = False) -> nn.Conv2d:
-
-    layer = nn.Conv2d(
-        in_channels,
-        out_channels,
-        kernel_size=kernel_size,
-        stride=stride,
-        padding=1,
-        bias=bias)
-
-    return layer
-
-
 class BaseBlock(nn.Module, metaclass=abc.ABCMeta):
     @property
     @abc.abstractmethod
     def EXPANSION(
-            self) -> None:
+            self) -> int:
 
         raise NotImplementedError
-
-
-class BasicBlock(BaseBlock):
-    EXPANSION = 1
 
     def __init__(
             self,
             in_channels: int,
             out_channels: int,
             stride: int = 1,
-            activation: nn.Module = nn.LeakyReLU,
             downsample: Optional[nn.Module] = None,
             batchnorm: bool = False) -> None:
 
-        super().__init__()
+        if stride != 1:
+            assert downsample is not None
 
-        self.conv1 = _conv_layer(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            stride=stride,
-            bias=not batchnorm)
-        self.bn1 = nn.BatchNorm2d(out_channels) if batchnorm else nn.Identity()
-        self.activation = activation(inplace=True)
-        self.conv2 = _conv_layer(out_channels, out_channels, bias=not batchnorm)
-        self.bn2 = nn.BatchNorm2d(out_channels) if batchnorm else nn.Identity()
-        self.downsample = downsample
+        self.in_channels = in_channels
+        self.out_channels = out_channels
         self.stride = stride
+        self.downsample = downsample
         self.batchnorm = batchnorm
+
+    @abc.abstractmethod
+    def _make_block(
+            self):
+
+        pass
+
+
+class BasicBlock(BaseBlock):
+    EXPANSION = 1
+
+    def _make_block(
+            self):
+
+        self.activation = nn.LeakyReLU(inplace=True)
+        self.conv1 = nn.Conv2d(
+            in_channels=self.in_channels,
+            out_channels=self.out_channels,
+            kernel_size=3,
+            stride=self.stride,
+            padding=1,
+            bias=(not self.batchnorm))
+        self.bn1 = nn.BatchNorm2d(self.out_channels) if self.batchnorm else nn.Identity()
+        self.conv2 = nn.Conv2d(
+            in_channels=self.out_channels,
+            out_channels=self.out_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            bias=(not self.batchnorm))
+        self.bn2 = nn.BatchNorm2d(self.out_channels) if self.batchnorm else nn.Identity()
 
     def forward(
             self,
@@ -115,7 +119,7 @@ class ResNetBuilder(nn.Module):
             num_blocks: int,
             stride: int = 1,
             block: BaseBlock = BasicBlock,
-            batchnorm: bool = False) -> nn.Sequential:
+            batchnorm: bool = True) -> nn.Sequential:
 
         downsample = None
         if stride != 1 or in_channels != out_channels * block.EXPANSION:
@@ -125,19 +129,21 @@ class ResNetBuilder(nn.Module):
                     out_channels=out_channels * block.EXPANSION,
                     kernel_size=1,
                     stride=stride,
-                    bias=not batchnorm),
-                nn.BatchNorm2d(
-                    out_channels * block.EXPANSION) if batchnorm else nn.Identity())
+                    bias=(not batchnorm)),
+                nn.BatchNorm2d(out_channels * block.EXPANSION) if batchnorm else nn.Identity())
 
         layers = []
         layers.append(block(
-            in_channels,
-            out_channels,
+            in_channels=in_channels,
+            out_channels=out_channels,
             stride=stride,
-            downsample=downsample))
+            downsample=downsample,
+            batchnorm=batchnorm))
         in_channels = out_channels * block.EXPANSION
         for _ in range(1, num_blocks):
-            layers.append(
-                block(in_channels, out_channels))
+            layers.append(block(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                batchnorm=batchnorm))
 
         return nn.Sequential(*layers)
