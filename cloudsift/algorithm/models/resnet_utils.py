@@ -38,6 +38,8 @@ class BaseBlock(nn.Module, metaclass=abc.ABCMeta):
         self.stride = stride
         self.downsample = downsample
         self.batchnorm = batchnorm
+        
+        self._make_block()
 
     @abc.abstractmethod
     def _make_block(
